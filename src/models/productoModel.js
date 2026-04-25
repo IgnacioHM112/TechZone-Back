@@ -1,50 +1,80 @@
 const db = require('../config/db');
 
 const Producto = {
-    // --- CRUD DE PRODUCTOS ---
+    // --- OBTENER TODOS LOS PRODUCTOS ---
     getAll: async () => {
         const [rows] = await db.query('SELECT * FROM productos');
         return rows;
     },
+
+    // --- CREAR PRODUCTO (Incluye los 7 campos de tu DB) ---
     create: async (nuevo) => {
-        const query = 'INSERT INTO productos (nombre, marca, descripcion, precio, stock, imagen_url, categoria_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
-        const [result] = await db.query(query, [nuevo.nombre, nuevo.marca, nuevo.descripcion, nuevo.precio, nuevo.stock, nuevo.imagen_url, nuevo.categoria_id]);
+        const query = `
+            INSERT INTO productos 
+            (nombre, marca, descripcion, precio, stock, imagen_url, categoria_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        
+        const params = [
+            nuevo.nombre, 
+            nuevo.marca, 
+            nuevo.descripcion, 
+            nuevo.precio, 
+            nuevo.stock, 
+            nuevo.imagen_url, 
+            nuevo.categoria_id
+        ];
+
+        const [result] = await db.query(query, params);
         return result.insertId;
     },
+
+    // --- ACTUALIZAR PRODUCTO ---
     update: async (id, datos) => {
-        const query = 'UPDATE productos SET nombre=?, marca=?, descripcion=?, precio=?, stock=?, imagen_url=?, categoria_id=? WHERE id=?';
-        await db.query(query, [datos.nombre, datos.marca, datos.descripcion, datos.precio, datos.stock, datos.imagen_url, datos.categoria_id, id]);
+        const query = `
+            UPDATE productos 
+            SET nombre=?, marca=?, descripcion=?, precio=?, stock=?, imagen_url=?, categoria_id=? 
+            WHERE id=?`;
+        
+        const params = [
+            datos.nombre, 
+            datos.marca, 
+            datos.descripcion, 
+            datos.precio, 
+            datos.stock, 
+            datos.imagen_url, 
+            datos.categoria_id, 
+            id
+        ];
+
+        await db.query(query, params);
         return true;
     },
+
+    // --- ELIMINAR PRODUCTO ---
     delete: async (id) => {
         await db.query('DELETE FROM productos WHERE id = ?', [id]);
         return true;
     },
 
-    // --- PANEL DE ADMIN: ÓRDENES Y MÉTRICAS (HU-15) ---
+    // --- CONSULTAS DE GESTIÓN (Para cuando Ramiro termine Usuarios) ---
     getHistorialVentas: async () => {
         const query = `
-            SELECT o.id AS orden_id, u.nombre AS cliente, o.total, o.fecha, o.estado 
+            SELECT o.id AS orden_id, u.nombre AS cliente, o.total, o.fecha 
             FROM ordenes o 
             JOIN usuarios u ON o.usuario_id = u.id 
             ORDER BY o.fecha DESC`;
         const [rows] = await db.query(query);
         return rows;
     },
+
     getDetalleOrden: async (ordenId) => {
         const query = `
-            SELECT d.producto_id, p.nombre, d.cantidad, d.precio_unitario, (d.cantidad * d.precio_unitario) AS subtotal
-            FROM detalle_orden d
+            SELECT d.producto_id, p.nombre, d.cantidad, d.precio_unitario
+            FROM detalle_ordenes d
             JOIN productos p ON d.producto_id = p.id
             WHERE d.orden_id = ?`;
         const [rows] = await db.query(query, [ordenId]);
         return rows;
-    },
-    getMetricas: async () => {
-        // Consulta para ventas totales y productos con poco stock (menos de 5 unidades)
-        const [ventas] = await db.query('SELECT SUM(total) as totalVentas, COUNT(*) as totalOrdenes FROM ordenes WHERE estado = "pagada"');
-        const [stockBajo] = await db.query('SELECT nombre, stock FROM productos WHERE stock < 5');
-        return { resumen: ventas[0], alertasStock: stockBajo };
     }
 };
 
