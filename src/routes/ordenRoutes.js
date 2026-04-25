@@ -1,10 +1,23 @@
 const express = require('express');
 const router = express.Router();
-// Importamos la función usando llaves para que coincida con el controlador
-const { crearOrden } = require('../controllers/ordenController');
-const verificarToken = require('../middlewares/authMiddleware');
+const ordenController = require('../controllers/ordenController');
+const auth = require('../middlewares/authMiddleware');
 
-// Definimos la ruta POST protegida por el token
-router.post('/', verificarToken, crearOrden);
+const verificarToken = auth.verificarToken || auth;
+
+// Ayudante para evitar el TypeError
+const safe = (fn, name) => {
+    if (typeof fn !== 'function') {
+        console.error(`🔴 ERROR: La función "${name}" no está definida en ordenController.js`);
+        return (req, res) => res.status(500).json({ error: `Función ${name} no definida` });
+    }
+    return fn;
+};
+
+// RUTAS DE ÓRDENES
+// La URL será: http://localhost:3000/api/ordenes
+router.get('/', verificarToken, safe(ordenController.obtenerOrdenes, 'obtenerOrdenes'));
+router.post('/', verificarToken, safe(ordenController.crearOrden, 'crearOrden'));
+router.get('/:id', verificarToken, safe(ordenController.obtenerOrdenPorId, 'obtenerOrdenPorId'));
 
 module.exports = router;

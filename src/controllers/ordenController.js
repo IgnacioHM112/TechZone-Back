@@ -1,65 +1,41 @@
 const db = require('../config/db');
-const client = require('../config/mercadopago');
-const { Preference } = require('mercadopago');
 
-const crearOrden = async (req, res) => {
+// Obtener todas las órdenes
+const obtenerOrdenes = async (req, res) => {
     try {
-        const { productos } = req.body;
-        const usuario_id = req.usuario.id;
-
-        // 1. Calculamos el total
-        const total = productos.reduce((acc, p) => acc + (p.precio * p.cantidad), 0);
-
-        // 2. Insertamos la cabecera de la orden
-        const [ordenResult] = await db.execute(
-            'INSERT INTO ordenes (usuario_id, total, estado) VALUES (?, ?, ?)',
-            [usuario_id, total, 'pendiente']
-        );
-        const ordenId = ordenResult.insertId;
-
-        // 3. Insertamos el detalle (cada producto)
-        const detallePromesas = productos.map(p => {
-            return db.execute(
-                'INSERT INTO detalle_orden (orden_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
-                [ordenId, p.id, p.cantidad, p.precio]
-            );
-        });
-        await Promise.all(detallePromesas);
-
-        // 4. Configurar la Preferencia de Mercado Pago
-        const preference = new Preference(client);
-        
-        const body = {
-            items: productos.map(p => ({
-                id: p.id.toString(),
-                title: "Compra TechZone",
-                quantity: Number(p.cantidad),
-                unit_price: Number(p.precio),
-                currency_id: 'ARS'
-            })),
-            back_urls: {
-                success: "https://www.google.com", // Usamos una URL real para probar
-                failure: "https://www.google.com",
-                pending: "https://www.google.com"
-            },
-            // Quitamos auto_return momentáneamente para testear
-            external_reference: ordenId.toString(),
-        };
-
-        // 5. Crear la preferencia y obtener el link
-        const response = await preference.create({ body });
-
-        // 6. Respuesta final al cliente (Postman/Frontend)
-        res.status(201).json({
-            message: 'Orden creada y link de pago generado',
-            ordenId: ordenId,
-            init_point: response.init_point 
-        });
-
+        // Ajustá 'ordenes' al nombre real de tu tabla en MySQL
+        const [rows] = await db.query('SELECT * FROM ordenes'); 
+        res.json(rows);
     } catch (error) {
-        console.error("Error detallado:", error);
-        res.status(500).json({ message: 'Error al procesar el pago' });
+        res.status(500).json({ mensaje: "Error al obtener órdenes", error: error.message });
     }
 };
 
-module.exports = { crearOrden };
+// Crear una nueva orden
+const crearOrden = async (req, res) => {
+    try {
+        const { total, productos } = req.body;
+        // Aquí iría tu lógica de INSERT
+        res.status(201).json({ mensaje: "Orden creada con éxito (Simulado)" });
+    } catch (error) {
+        res.status(500).json({ mensaje: "Error al crear orden", error: error.message });
+    }
+};
+
+// Obtener orden por ID
+const obtenerOrdenPorId = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const [rows] = await db.query('SELECT * FROM ordenes WHERE id = ?', [id]);
+        if (rows.length === 0) return res.status(404).json({ mensaje: "Orden no encontrada" });
+        res.json(rows[0]);
+    } catch (error) {
+        res.status(500).json({ mensaje: "Error al obtener la orden", error: error.message });
+    }
+};
+
+module.exports = {
+    obtenerOrdenes,
+    crearOrden,
+    obtenerOrdenPorId
+};
