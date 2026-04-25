@@ -1,28 +1,27 @@
 const db = require('../config/db');
 
-// Obtener todas las órdenes
 const obtenerOrdenes = async (req, res) => {
     try {
-        // Ajustá 'ordenes' al nombre real de tu tabla en MySQL
-        const [rows] = await db.query('SELECT * FROM ordenes'); 
+        const [rows] = await db.query('SELECT * FROM ordenes');
         res.json(rows);
     } catch (error) {
         res.status(500).json({ mensaje: "Error al obtener órdenes", error: error.message });
     }
 };
 
-// Crear una nueva orden
 const crearOrden = async (req, res) => {
     try {
-        const { total, productos } = req.body;
-        // Aquí iría tu lógica de INSERT
-        res.status(201).json({ mensaje: "Orden creada con éxito (Simulado)" });
+        const { usuario_id, total } = req.body; // El usuario_id lo mandamos manual por ahora
+        const [result] = await db.query(
+            'INSERT INTO ordenes (usuario_id, total) VALUES (?, ?)',
+            [usuario_id, total]
+        );
+        res.status(201).json({ mensaje: "Orden registrada con éxito", orden_id: result.insertId });
     } catch (error) {
-        res.status(500).json({ mensaje: "Error al crear orden", error: error.message });
+        res.status(500).json({ mensaje: "Error al registrar la orden", error: error.message });
     }
 };
 
-// Obtener orden por ID
 const obtenerOrdenPorId = async (req, res) => {
     try {
         const { id } = req.params;
