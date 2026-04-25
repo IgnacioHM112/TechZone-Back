@@ -1,19 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const productoController = require('../controllers/productoController');
-const auth = require('../middlewares/authMiddleware'); 
 
-// Si Ramiro exportó como objeto usa auth.verificarToken, si no usa auth directamente
-const verificarToken = auth.verificarToken || auth;
+// Comentamos esto para que puedas trabajar sin depender del login de Ramiro
+// const auth = require('../middlewares/authMiddleware');
+// const verificarToken = auth.verificarToken || auth;
 
-// Rutas Públicas/Clientes
-router.get('/', productoController.getProductos);
+const safe = (fn, name) => {
+    if (typeof fn !== 'function') return (req, res) => res.status(500).json({ error: `Función ${name} no definida` });
+    return fn;
+};
 
-// Rutas de Admin (Protegidas)
-router.post('/', verificarToken, productoController.crearProducto);
-router.put('/:id', verificarToken, productoController.actualizarProducto);
-router.delete('/:id', verificarToken, productoController.eliminarProducto);
-router.get('/admin/historial', verificarToken, productoController.verHistorial);
-router.get('/admin/orden/:id', verificarToken, productoController.verDetalleVenta);
+// Todas las rutas quedan públicas temporalmente para tu desarrollo
+router.get('/', safe(productoController.obtenerProductos, 'obtenerProductos'));
+router.get('/:id', safe(productoController.obtenerProductoPorId, 'obtenerProductoPorId'));
+router.get('/admin/metricas', safe(productoController.obtenerMetricas, 'obtenerMetricas'));
+router.post('/', safe(productoController.crearProducto, 'crearProducto'));
+router.put('/:id', safe(productoController.actualizarProducto, 'actualizarProducto'));
+router.delete('/:id', safe(productoController.eliminarProducto, 'eliminarProducto'));
 
 module.exports = router;
