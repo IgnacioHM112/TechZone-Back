@@ -1,22 +1,23 @@
 const jwt = require('jsonwebtoken');
 
 const verificarToken = (req, res, next) => {
-    
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-        // SI NO TENÉS EL RETURN, NO SE FRENA.
-        return res.status(403).json({ message: 'Acceso denegado' }); 
+        return res.status(401).json({ mensaje: "Acceso denegado. No hay token." });
     }
 
     try {
-        const cifrado = jwt.verify(token, 'clave_secreta_techzone');
-        req.usuario = cifrado;
-        next(); 
+        // Usamos la clave del .env o una fija para pruebas
+        const secret = process.env.JWT_SECRET || '123456789';
+        const decoded = jwt.verify(token, secret);
+        req.usuario = decoded;
+        next();
     } catch (error) {
-        // ACÁ TAMBIÉN VA EL RETURN
-        return res.status(401).json({ message: 'Token no válido' });
+        // Este es el error 403 que estás viendo ahora
+        return res.status(403).json({ mensaje: "Token inválido o expirado." });
     }
 };
 
-module.exports = verificarToken;
+module.exports = { verificarToken };
