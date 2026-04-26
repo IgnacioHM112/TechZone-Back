@@ -1,10 +1,14 @@
-const { MercadoPagoConfig } = require('mercadopago');
+require('dotenv').config();
+const { MercadoPagoConfig, Preference } = require('mercadopago');
 
-// No hace falta el require(dotenv) acá si ya lo pusiste en app.js, 
-// pero dejarlo no hace daño.
+if (!process.env.MP_ACCESS_TOKEN) {
+    console.error('❌ CRÍTICO: MP_ACCESS_TOKEN no definido en el .env');
+}
 
 const client = new MercadoPagoConfig({ 
     accessToken: process.env.MP_ACCESS_TOKEN 
 });
 
-module.exports = client;
+const preference = new Preference(client);
+
+module.exports = { preference };

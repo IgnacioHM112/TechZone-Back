@@ -1,35 +1,61 @@
 require('dotenv').config();
-
 const express = require('express');
 const cors = require('cors');
-const db = require('./config/db');
-const productoRoutes = require('./routes/productoRoutes');
-const ordenRoutes = require('./routes/ordenRoutes');
+const sequelize = require('./config/database');
+const runSeeders = require('./database/seeders');
+
+// Importar modelos
+const User = require('./models/user');
+const Role = require('./models/role');
+const Category = require('./models/category');
+const Product = require('./models/product');
+const Cart = require('./models/cart');
+const CartItem = require('./models/cartItem');
+const Order = require('./models/order');
+const OrderItem = require('./models/orderItem');
+
+// Rutas
+const authRoutes = require('./routes/authRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
+const productRoutes = require('./routes/productRoutes');
+const cartRoutes = require('./routes/cartRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- MIDDLEWARES ---
 app.use(cors());
 app.use(express.json());
 
 // --- RUTAS ---
-// Solo tus rutas de productos y órdenes
-app.use('/api/productos', productoRoutes);
-app.use('/api/ordenes', ordenRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
 
-// --- PRUEBA DE CONEXIÓN ---
-async function testConnection() {
+app.get('/', (req, res) => {
+    res.json({ mensaje: "API TechZone-Back corriendo con Pagos y Stock" });
+});
+
+async function startServer() {
     try {
-        const [rows] = await db.query('SELECT 1 + 1 AS result');
-        console.log('✅ Conexión a MySQL exitosa (TechStore DB)');
+        await sequelize.authenticate();
+        // Cambiamos a alter: true para preservar los datos existentes
+        await sequelize.sync({ alter: true });
+        console.log('✅ Tablas sincronizadas (Datos preservados).');
+        await runSeeders();
+
+        if (process.env.NODE_ENV !== 'test') {
+            app.listen(PORT, () => {
+                console.log(`🚀 Servidor listo en http://localhost:${PORT}`);
+            });
+        }
     } catch (err) {
-        console.error('❌ Error conectando a la base de datos:', err);
+        console.error('❌ Error al iniciar el servidor:', err);
     }
 }
 
-testConnection();
+startServer();
 
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-});
+module.exports = app;

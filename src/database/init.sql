@@ -1,30 +1,27 @@
--- Script mejorado por Ignacio - 14/04/2026
+-- Database initialization
 CREATE DATABASE IF NOT EXISTS techstore_db;
 USE techstore_db;
 
--- 1. Tabla de Categorías (Para organizar el hardware)
-CREATE TABLE IF NOT EXISTS categorias (
+-- 1. Roles Table
+CREATE TABLE IF NOT EXISTS roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description VARCHAR(255)
 );
 
--- 2. Tabla de Productos
-CREATE TABLE IF NOT EXISTS productos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(255) NOT NULL,
-    descripcion TEXT,
-    precio DECIMAL(10, 2) NOT NULL,
-    stock INT NOT NULL,
-    imagen_url VARCHAR(255),
-    categoria_id INT,
-    FOREIGN KEY (categoria_id) REFERENCES categorias(id)
-);
-
--- 3. Tabla de Usuarios (Para el Login que usará el equipo)
+-- 2. Users Table
 CREATE TABLE IF NOT EXISTS usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100),
+    name VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    rol ENUM('cliente', 'admin') DEFAULT 'cliente'
+    rol_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (rol_id) REFERENCES roles(id)
 );
+
+-- Seed Roles
+INSERT INTO roles (name, description) VALUES 
+('admin', 'Administrator with full access'),
+('usuario', 'Regular user with limited access')
+ON DUPLICATE KEY UPDATE name=name;
