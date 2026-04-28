@@ -20,6 +20,7 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const productRoutes = require('./routes/productRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const chatbotRoutes = require('./routes/chatbotRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 app.get('/', (req, res) => {
     res.json({ mensaje: "API TechZone-Back corriendo con Pagos y Stock" });
@@ -41,9 +43,18 @@ app.get('/', (req, res) => {
 async function startServer() {
     try {
         await sequelize.authenticate();
-        // Cambiamos a alter: true para preservar los datos existentes
-        await sequelize.sync({ alter: true });
-        console.log('✅ Tablas sincronizadas (Datos preservados).');
+        console.log('✅ Conexión a la base de datos establecida.');
+        
+        // Sincronizar tablas - Usamos alter: true con precaución
+        try {
+            await sequelize.sync({ alter: true });
+            console.log('✅ Tablas sincronizadas.');
+        } catch (syncErr) {
+            console.warn('⚠️ Advertencia en sincronización (posible conflicto de FK):', syncErr.message);
+            // Si alter falla, intentamos sync normal para no bloquear el inicio
+            await sequelize.sync();
+        }
+        
         await runSeeders();
 
         if (process.env.NODE_ENV !== 'test') {
@@ -52,7 +63,7 @@ async function startServer() {
             });
         }
     } catch (err) {
-        console.error('❌ Error al iniciar el servidor:', err);
+        console.error('❌ Error crítico al iniciar el servidor:', err);
     }
 }
 
