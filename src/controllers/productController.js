@@ -9,17 +9,18 @@ const productController = {
         try {
             const { name, category_id, minPrice, maxPrice, sort, page = 1, limit = 12 } = req.query;
             
-            // Cálculos de paginación
             const offset = (parseInt(page) - 1) * parseInt(limit);
             const limitItems = parseInt(limit);
 
             let where = {};
 
-            // Filtro de stock y active para usuarios normales
+            // Filtro de stock y active para usuarios normales (públicos o no admin)
             const isAdmin = req.user && req.user.role === 'admin';
             if (!isAdmin) {
+                // Solo mostramos productos con stock y que estén activos
+                // Usamos [Op.or] para ser más flexibles si active es NULL pero queremos que se vea (aunque por defecto es true)
                 where.stock = { [Op.gt]: 0 };
-                where.active = true;
+                where.active = { [Op.not]: false }; // Esto incluye true y NULL si lo hubiera
             }
 
             if (name) where.name = { [Op.like]: `%${name}%` };
@@ -34,7 +35,8 @@ const productController = {
             if (sort === 'price_asc') order = [['price', 'ASC']];
             if (sort === 'price_desc') order = [['price', 'DESC']];
 
-            // Buscamos con conteo para la meta-información
+            console.log(`🔍 Buscando productos con filtros:`, JSON.stringify(where));
+
             const { count, rows } = await Product.findAndCountAll({
                 where,
                 order,
@@ -53,6 +55,7 @@ const productController = {
                 }
             });
         } catch (error) {
+            console.error('❌ Error en getAll productos:', error);
             res.status(500).json({ mensaje: "Error al obtener productos", error: error.message });
         }
     },
@@ -66,6 +69,7 @@ const productController = {
             if (!product) return res.status(404).json({ mensaje: "Producto no encontrado" });
             res.json(product);
         } catch (error) {
+            console.error('❌ Error en getOne producto:', error);
             res.status(500).json({ mensaje: "Error al obtener el producto", error: error.message });
         }
     },
@@ -88,10 +92,13 @@ const productController = {
 
             const newProduct = await Product.create({
                 name, description, price, stock, category_id, 
-                image_url, image_public_id, active
+                image_url, image_public_id, active: active !== undefined ? active : true
             });
+            
+            console.log(`✅ Producto creado: ${name}`);
             res.status(201).json(newProduct);
         } catch (error) {
+            console.error('❌ Error en create producto:', error);
             res.status(500).json({ mensaje: "Error al crear producto", error: error.message });
         }
     },
@@ -105,7 +112,6 @@ const productController = {
             let updateData = { ...req.body };
 
             if (req.file) {
-                // Si hay una imagen vieja, borrarla de Cloudinary
                 if (product.image_public_id) {
                     await cloudinary.uploader.destroy(product.image_public_id);
                 }
@@ -114,8 +120,10 @@ const productController = {
             }
 
             await product.update(updateData);
+            console.log(`✅ Producto actualizado: ${product.name}`);
             res.json({ mensaje: "Producto actualizado con éxito", product });
         } catch (error) {
+            console.error('❌ Error en update producto:', error);
             res.status(500).json({ mensaje: "Error al actualizar producto", error: error.message });
         }
     },
@@ -126,14 +134,15 @@ const productController = {
             const product = await Product.findByPk(req.params.id);
             if (!product) return res.status(404).json({ mensaje: "Producto no encontrado" });
             
-            // Borrar imagen de Cloudinary
             if (product.image_public_id) {
                 await cloudinary.uploader.destroy(product.image_public_id);
             }
 
             await product.destroy();
+            console.log(`✅ Producto eliminado ID: ${req.params.id}`);
             res.json({ mensaje: "Producto eliminado con éxito" });
         } catch (error) {
+            console.error('❌ Error en delete producto:', error);
             res.status(500).json({ mensaje: "Error al eliminar producto", error: error.message });
         }
     }

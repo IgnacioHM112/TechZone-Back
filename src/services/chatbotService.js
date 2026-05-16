@@ -1,50 +1,127 @@
 const https = require('https');
+const Product = require('../models/product');
+const Category = require('../models/category');
+const { Op } = require('sequelize');
 
 const SYSTEM_INSTRUCTION = `
-Eres TechZone Bot, el asistente virtual experto en hardware de la tienda TechZone.
-Tu rol es ayudar a los usuarios a encontrar productos de hardware (componentes de PC) que se ajusten a sus necesidades y presupuesto.
+Eres el asistente de atención al cliente de TechZone, experto en hardware.
+Tu rol es ayudar a los usuarios de manera concisa, amable y profesional.
 
-DIRECTRICES:
-1. Solo recomiendas productos de hardware: procesadores, motherboards, tarjetas de video, memoria RAM, almacenamiento (SSD/HDD), fuentes de alimentación, gabinetes, coolers, monitores, periféricos, etc.
-2. Cuando un usuario mencione un presupuesto, respetalo y sugerí opciones dentro de ese rango.
-3. Preguntá detalles si la información es insuficiente (por ejemplo: "¿Qué uso le vas a dar?", "¿Tenés componentes?").
-4. No inventés productos que no existan en el catálogo de TechZone.
-5. Si no sabés la disponibilidad de un producto específico, indicá que consulten en la tienda.
-6. Sé friendly, conciso y orientado a la venta.
+REGLAS DE FORMATO (OBLIGATORIAS):
+1. Usa un saludo formal al inicio (ej: "Estimado/a cliente", "Buen día").
+2. Usa puntos de lista (bullets) para enumerar productos, pasos o características.
+3. No escribas párrafos de más de 3 líneas. Divide la información si es necesario para mantener la brevedad.
+4. Despídete cordialmente invitando al usuario a seguir consultando.
 
-INFORMACIÓN DE LA TIENDA:
-- TechZone es una tienda especializada en hardware para PCs y gaming.
-- Ofrecemos productos de las mejores marcas: Intel, AMD, NVIDIA, ASUS, MSI, Gigabyte, Corsair, Kingston, Western Digital, Samsung, etc.
-- Todos nuestros productos tienen garantía oficial.
+DIRECTRICES DE CONTENIDO:
+1. Solo recomiendas productos presentes en el "CATÁLOGO REAL" proporcionado más abajo.
+2. Si un usuario pregunta por un producto o categoría que NO está en el catálogo, informa educadamente y ofrece una alternativa similar si existe.
+3. Siempre menciona el PRECIO y la DISPONIBILIDAD (Stock) cuando hables de un producto específico.
+4. Si el stock es 0, indica que no hay disponibilidad inmediata.
+5. Cuando un usuario mencione un presupuesto, sugiere opciones del catálogo que no lo superen.
+6. Si la información es insuficiente, utiliza la lista de productos para guiar al usuario.
+7. Sé amable, conciso y orientado a la venta. No inventes especificaciones ni precios.
 
-Responde siempre en español y de manera profesional.
+CATÁLOGO REAL (Contexto actual relevante):
+{{CATALOG_CONTEXT}}
+
+Responde siempre en español.
 `;
 
 let chatHistory = [];
 
-const chatWithBot = async (userMessage) => {
-    return new Promise((resolve, reject) => {
-        try {
-            // Agregar mensaje del usuario al historial
-            chatHistory.push({
-                role: 'user',
-                content: userMessage,
-            });
+/**
+ * Busca productos relevantes en la base de datos basándose en el mensaje del usuario.
+ * Mejora: Busca por nombre, descripción y también por nombre de categoría.
+ */
+const getRelevantProducts = async (message) => {
+    try {
+        const cleanMessage = message.toLowerCase().replace(/[?¿!¡.,]/g, '');
+        const keywords = cleanMessage.split(' ').filter(word => word.length >= 2);
 
-            // Construir mensajes para la API
+        if (keywords.length === 0) {
+            return await Product.findAll({
+                limit: 5,
+                where: { active: true, stock: { [Op.gt]: 0 } },
+                include: [{ model: Category, as: 'category', attributes: ['name'] }]
+            });
+        }
+
+        // 1. Buscar categorías que coincidan con las palabras clave
+        const matchingCategories = await Category.findAll({
+            where: {
+                [Op.or]: keywords.map(kw => ({
+                    name: { [Op.like]: `%${kw}%` }
+                }))
+            },
+            attributes: ['id']
+        });
+        const categoryIds = matchingCategories.map(c => c.id);
+
+        // 2. Buscar productos por nombre, descripción o categoría
+        const products = await Product.findAll({
+            where: {
+                active: true,
+                [Op.or]: [
+                    ...keywords.map(kw => ({ name: { [Op.like]: `%${kw}%` } })),
+                    ...keywords.map(kw => ({ description: { [Op.like]: `%${kw}%` } })),
+                    { category_id: { [Op.in]: categoryIds } }
+                ]
+            },
+            include: [{ model: Category, as: 'category', attributes: ['name'] }],
+            limit: 15 // Aumentamos el límite para dar más contexto
+        });
+
+        return products;
+    } catch (error) {
+        console.error('Error buscando productos para chatbot:', error);
+        return [];
+    }
+};
+
+const chatWithBot = async (userMessage, history = null) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // 1. Obtener productos relevantes de la DB
+            const relevantProducts = await getRelevantProducts(userMessage);
+            
+            let catalogContext = "";
+            if (relevantProducts.length > 0) {
+                catalogContext = relevantProducts.map(p => 
+                    `- ${p.name} | Cat: ${p.category?.name || 'Gral'} | Precio: $${p.price} | Stock: ${p.stock} | Desc: ${p.description}`
+                ).join('\n');
+            } else {
+                catalogContext = "No hay productos exactos en el catálogo para esta búsqueda. Informar al usuario que puede consultar por otros componentes.";
+            }
+
+            // 2. Personalizar la instrucción del sistema
+            const currentSystemInstruction = SYSTEM_INSTRUCTION.replace('{{CATALOG_CONTEXT}}', catalogContext);
+
+            // 3. Manejar historial (Si se pasa history usamos ese, si no usamos el global)
+            let currentHistory = history;
+            if (currentHistory === null) {
+                chatHistory.push({
+                    role: 'user',
+                    content: userMessage,
+                });
+                currentHistory = chatHistory;
+            } else {
+                currentHistory = [...history, { role: 'user', content: userMessage }];
+            }
+
             const messages = [
                 {
                     role: 'system',
-                    content: SYSTEM_INSTRUCTION,
+                    content: currentSystemInstruction,
                 },
-                ...chatHistory,
+                ...currentHistory,
             ];
 
             const postData = JSON.stringify({
                 model: 'llama-3.3-70b-versatile',
                 messages: messages,
-                temperature: 0.7,
-                max_tokens: 2048,
+                temperature: 0.6,
+                max_tokens: 1024,
                 top_p: 0.9,
             });
 
@@ -61,70 +138,38 @@ const chatWithBot = async (userMessage) => {
 
             const req = https.request(options, (res) => {
                 let data = '';
-
-                res.on('data', (chunk) => {
-                    data += chunk;
-                });
-
+                res.on('data', (chunk) => { data += chunk; });
                 res.on('end', () => {
                     try {
                         const parsed = JSON.parse(data);
-                        
                         if (res.statusCode === 200 || res.statusCode === 201) {
                             const assistantMessage = parsed.choices?.[0]?.message?.content || '';
                             
-                            // Agregar respuesta del asistente al historial
-                            chatHistory.push({
-                                role: 'assistant',
-                                content: assistantMessage,
-                            });
-
-                            // Limitar historial a los últimos 20 mensajes
-                            if (chatHistory.length > 20) {
-                                chatHistory = chatHistory.slice(-20);
+                            // Si usamos el historial global, lo actualizamos
+                            if (history === null) {
+                                chatHistory.push({ role: 'assistant', content: assistantMessage });
+                                if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
                             }
-
-                            resolve({
-                                success: true,
-                                message: assistantMessage,
-                            });
+                            
+                            resolve({ success: true, message: assistantMessage });
                         } else {
                             console.error('Error de API Groq:', parsed);
-                            resolve({
-                                success: false,
-                                message: 'Error al comunicarse con el servicio de IA.',
-                                error: parsed.error?.message || `HTTP ${res.statusCode}`,
-                            });
+                            resolve({ success: false, message: 'Error de IA.', error: parsed.error?.message });
                         }
                     } catch (e) {
-                        console.error('Error parseando respuesta:', e);
-                        resolve({
-                            success: false,
-                            message: 'Error al procesar la respuesta del servicio.',
-                            error: e.message,
-                        });
+                        resolve({ success: false, message: 'Error de procesamiento.', error: e.message });
                     }
                 });
             });
 
             req.on('error', (e) => {
-                console.error('Error en request:', e);
-                resolve({
-                    success: false,
-                    message: 'Error de conexión con el servicio de IA.',
-                    error: e.message,
-                });
+                resolve({ success: false, message: 'Error de conexión.', error: e.message });
             });
 
             req.write(postData);
             req.end();
         } catch (error) {
-            console.error('Error en chatbot:', error);
-            resolve({
-                success: false,
-                message: 'Lo siento, hubo un error al procesar tu mensaje. Por favor, intentá de nuevo.',
-                error: error.message,
-            });
+            resolve({ success: false, message: 'Error inesperado.', error: error.message });
         }
     });
 };
