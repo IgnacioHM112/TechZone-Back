@@ -43,7 +43,40 @@ const handleResetChat = async (req, res) => {
     }
 };
 
+const handleEmailReply = async (req, res) => {
+    try {
+        const { message, history } = req.body;
+
+        if (!message || typeof message !== 'string' || message.trim() === '') {
+            return res.status(400).json({
+                success: false,
+                message: 'El campo "message" es requerido.',
+            });
+        }
+
+        // Pasamos un array vacío si no hay historial para que sea "stateless"
+        // y no use el historial global del chat de la web
+        const result = await chatWithBot(message, history || []);
+
+        if (!result.success) {
+            return res.status(500).json(result);
+        }
+
+        res.json({
+            success: true,
+            reply: result.message,
+        });
+    } catch (error) {
+        console.error('Error en handleEmailReply:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+        });
+    }
+};
+
 module.exports = {
     handleChatMessage,
     handleResetChat,
+    handleEmailReply,
 };

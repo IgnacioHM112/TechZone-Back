@@ -9,18 +9,22 @@ const register = async (req, res) => {
 
         // Validar que las contraseñas coincidan
         if (password !== confirmPassword) {
+            console.warn(`⚠️ Intento de registro fallido: Contraseñas no coinciden para ${email}`);
             return res.status(400).json({ mensaje: "Las contraseñas no coinciden" });
         }
 
         // Verificar si el usuario ya existe
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
+            console.warn(`⚠️ Intento de registro fallido: Email ya registrado: ${email}`);
             return res.status(400).json({ mensaje: "El email ya está registrado" });
         }
 
         // Obtener el rol
-        const role = await Role.findOne({ where: { name: roleName || 'usuario' } });
+        const targetRole = roleName || 'usuario';
+        const role = await Role.findOne({ where: { name: targetRole } });
         if (!role) {
+            console.error(`❌ Error en registro: Rol '${targetRole}' no encontrado en la base de datos`);
             return res.status(400).json({ mensaje: "Rol no válido" });
         }
 
@@ -36,12 +40,14 @@ const register = async (req, res) => {
             rol_id: role.id
         });
 
+        console.log(`✅ Usuario registrado con éxito: ${email} (ID: ${newUser.id})`);
         res.status(201).json({ 
             mensaje: "Usuario registrado con éxito",
             userId: newUser.id 
         });
 
     } catch (error) {
+        console.error('❌ Error crítico en registro:', error);
         res.status(500).json({ mensaje: "Error en el registro", error: error.message });
     }
 };
@@ -57,12 +63,14 @@ const login = async (req, res) => {
         });
 
         if (!user) {
+            console.warn(`⚠️ Intento de login fallido: Usuario no encontrado: ${email}`);
             return res.status(401).json({ mensaje: "Credenciales inválidas" });
         }
 
         // Verificar password
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
+            console.warn(`⚠️ Intento de login fallido: Contraseña incorrecta para: ${email}`);
             return res.status(401).json({ mensaje: "Credenciales inválidas" });
         }
 
@@ -73,6 +81,7 @@ const login = async (req, res) => {
             { expiresIn: '8h' }
         );
 
+        console.log(`✅ Login exitoso: ${email} (${user.role.name})`);
         res.json({
             mensaje: "Login exitoso",
             token,
@@ -85,6 +94,7 @@ const login = async (req, res) => {
         });
 
     } catch (error) {
+        console.error('❌ Error crítico en login:', error);
         res.status(500).json({ mensaje: "Error en el login", error: error.message });
     }
 };
@@ -97,6 +107,7 @@ const getProfile = async (req, res) => {
         });
         res.json(user);
     } catch (error) {
+        console.error('❌ Error al obtener perfil:', error);
         res.status(500).json({ mensaje: "Error al obtener perfil", error: error.message });
     }
 };
