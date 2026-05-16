@@ -1,3 +1,5 @@
+![TechZone Banner](../Archivos/6%20-%20Banner.png)
+
 # 💻 TechZone-Back - API REST 🚀
 
 ¡Bienvenido al repositorio de **TechZone-Back**! Esta es la API robusta y escalable que alimenta la plataforma de e-commerce TechZone. Construida con un enfoque en el rendimiento, la seguridad y la facilidad de integración.
