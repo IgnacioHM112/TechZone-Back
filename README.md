@@ -1,4 +1,4 @@
-![TechZone Banner](../Archivos/6%20-%20Banner.png)
+![TechZone Banner](./assets/6%20-%20Banner.png)
 
 # 💻 TechZone-Back - API REST 🚀
 
