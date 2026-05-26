@@ -10,7 +10,8 @@ describe('Auth Endpoints (Sequelize)', () => {
             .send({
                 name: 'Test User',
                 email: `test_${Date.now()}@example.com`,
-                password: 'password123'
+                password: 'password123',
+                confirmPassword: 'password123'
             });
         
         expect(res.statusCode).toEqual(201);
@@ -26,7 +27,8 @@ describe('Auth Endpoints (Sequelize)', () => {
             .send({
                 name: 'Login User',
                 email: email,
-                password: 'password123'
+                password: 'password123',
+                confirmPassword: 'password123'
             });
 
         // Intentar login
