@@ -1,38 +1,44 @@
 const https = require('https');
 const Product = require('../models/product');
 const Category = require('../models/category');
+const Cart = require('../models/cart');
+const CartItem = require('../models/cartItem');
+const Order = require('../models/order');
+const OrderItem = require('../models/orderItem');
 const { Op } = require('sequelize');
 
 const SYSTEM_INSTRUCTION = `
-Eres el asistente de atención al cliente de TechZone, experto en hardware.
-Tu rol es ayudar a los usuarios de manera concisa, amable y profesional.
+Eres el asistente de atención al cliente de TechZone, experto en hardware y componentes de PC.
+Tu rol es ayudar a los usuarios de manera profesional, amigable y visualmente clara.
 
-REGLAS DE FORMATO (OBLIGATORIAS):
-1. Usa un saludo formal al inicio (ej: "Estimado/a cliente", "Buen día").
-2. Usa puntos de lista (bullets) para enumerar productos, pasos o características.
-3. No escribas párrafos de más de 3 líneas. Divide la información si es necesario para mantener la brevedad.
-4. Despídete cordialmente invitando al usuario a seguir consultando.
+REGLAS DE FORMATO (MANDATORIAS):
+1. **Markdown estricto**: Usa negritas para nombres de productos, precios y títulos.
+2. **Espaciado**: Deja una línea en blanco entre párrafos y secciones para que el texto sea fácil de leer.
+3. **Listas**: Usa puntos de lista (\`-\` o \`*\`) para enumerar productos, características o pasos.
+4. **Emojis**: Usa emojis de forma sutil para mejorar la experiencia (ej: 💻, 🚀, 💰, ✅).
+5. **Saludo y Despedida**: Comienza con un saludo cordial y termina con una invitación a seguir consultando.
 
 DIRECTRICES DE CONTENIDO:
-1. Solo recomiendas productos presentes en el "CATÁLOGO REAL" proporcionado más abajo.
-2. Si un usuario pregunta por un producto o categoría que NO está en el catálogo, informa educadamente y ofrece una alternativa similar si existe.
-3. Siempre menciona el PRECIO y la DISPONIBILIDAD (Stock) cuando hables de un producto específico.
-4. Si el stock es 0, indica que no hay disponibilidad inmediata.
-5. Cuando un usuario mencione un presupuesto, sugiere opciones del catálogo que no lo superen.
-6. Si la información es insuficiente, utiliza la lista de productos para guiar al usuario.
-7. Sé amable, conciso y orientado a la venta. No inventes especificaciones ni precios.
+1. Solo proporcionas información de productos presentes en el **CATÁLOGO REAL** proporcionado abajo.
+2. Siempre menciona el **PRECIO** y la **DISPONIBILIDAD** (Stock) de forma objetiva.
+3. Si el stock es 0, informa que no hay disponibilidad actual.
+4. Si un producto no está en el catálogo, informa al usuario con amabilidad y menciona opciones con características similares.
+5. Tu función es ser un asistente informativo y experto. No realices transacciones ni fuerces la venta; tu objetivo es brindar datos precisos para que el usuario tome su propia decisión.
+6. Sé conciso y profesional. No inventes datos técnicos ni precios.
 
-CATÁLOGO REAL (Contexto actual relevante):
+CONTEXTO PERSONAL DEL USUARIO:
+{{USER_CONTEXT}}
+
+CATÁLOGO REAL (Contexto actual):
 {{CATALOG_CONTEXT}}
 
-Responde siempre en español.
+Responde siempre en español y asegúrate de que el formato sea impecable.
 `;
 
 let chatHistory = [];
 
 /**
  * Busca productos relevantes en la base de datos basándose en el mensaje del usuario.
- * Mejora: Busca por nombre, descripción y también por nombre de categoría.
  */
 const getRelevantProducts = async (message) => {
     try {
@@ -47,7 +53,6 @@ const getRelevantProducts = async (message) => {
             });
         }
 
-        // 1. Buscar categorías que coincidan con las palabras clave
         const matchingCategories = await Category.findAll({
             where: {
                 [Op.or]: keywords.map(kw => ({
@@ -58,7 +63,6 @@ const getRelevantProducts = async (message) => {
         });
         const categoryIds = matchingCategories.map(c => c.id);
 
-        // 2. Buscar productos por nombre, descripción o categoría
         const products = await Product.findAll({
             where: {
                 active: true,
@@ -69,7 +73,7 @@ const getRelevantProducts = async (message) => {
                 ]
             },
             include: [{ model: Category, as: 'category', attributes: ['name'] }],
-            limit: 15 // Aumentamos el límite para dar más contexto
+            limit: 15
         });
 
         return products;
@@ -79,10 +83,65 @@ const getRelevantProducts = async (message) => {
     }
 };
 
-const chatWithBot = async (userMessage, history = null) => {
+/**
+ * Obtiene el contexto personal del usuario (Carrito y Compras).
+ */
+const getUserContext = async (user) => {
+    if (!user) {
+        return "El usuario NO ha iniciado sesión. Si pregunta por sus compras o carrito, invítalo amablemente a iniciar sesión o registrarse.";
+    }
+
+    try {
+        let context = `Usuario: ${user.name} (Email: ${user.email})\n`;
+
+        // 1. Obtener Carrito
+        const cart = await Cart.findOne({
+            where: { user_id: user.id },
+            include: [{ model: CartItem, as: 'items', include: [{ model: Product, as: 'product' }] }]
+        });
+
+        if (cart && cart.items && cart.items.length > 0) {
+            context += "CARRITO ACTUAL (Productos seleccionados):\n";
+            cart.items.forEach(item => {
+                context += `- ${item.product.name} (Cantidad: ${item.quantity}, Precio unitario: $${item.unit_price})\n`;
+            });
+            context += "Nota: Informa al usuario sobre estos artículos si pregunta por su carrito de forma objetiva.\n";
+        } else {
+            context += "CARRITO ACTUAL: El carrito se encuentra vacío actualmente.\n";
+        }
+
+        // 2. Obtener Órdenes pasadas
+        const orders = await Order.findAll({
+            where: { user_id: user.id },
+            limit: 3,
+            order: [['created_at', 'DESC']],
+            include: [{ model: OrderItem, as: 'items', include: [{ model: Product, as: 'product' }] }]
+        });
+
+        if (orders && orders.length > 0) {
+            context += "HISTORIAL DE COMPRAS (Últimos registros):\n";
+            orders.forEach(order => {
+                const date = new Date(order.created_at).toLocaleDateString();
+                context += `- Orden #${order.id} | Fecha: ${date} | Total: $${order.total} | Estado: ${order.status}\n`;
+                order.items.forEach(item => {
+                    context += `  * ${item.product?.name || 'Producto'} (Cant: ${item.quantity})\n`;
+                });
+            });
+        } else {
+            context += "HISTORIAL DE COMPRAS: No se registran compras previas en el sistema.\n";
+        }
+
+        return context;
+    } catch (error) {
+        console.error('Error obteniendo contexto de usuario:', error);
+        return "Error al recuperar datos del usuario.";
+    }
+};
+
+const chatWithBot = async (userMessage, history = null, user = null) => {
     return new Promise(async (resolve, reject) => {
         try {
-            // 1. Obtener productos relevantes de la DB
+            // 1. Obtener productos relevantes
             const relevantProducts = await getRelevantProducts(userMessage);
             
             let catalogContext = "";
@@ -94,10 +153,15 @@ const chatWithBot = async (userMessage, history = null) => {
                 catalogContext = "No hay productos exactos en el catálogo para esta búsqueda. Informar al usuario que puede consultar por otros componentes.";
             }
 
-            // 2. Personalizar la instrucción del sistema
-            const currentSystemInstruction = SYSTEM_INSTRUCTION.replace('{{CATALOG_CONTEXT}}', catalogContext);
+            // 2. Obtener contexto del usuario
+            const userContext = await getUserContext(user);
 
-            // 3. Manejar historial (Si se pasa history usamos ese, si no usamos el global)
+            // 3. Personalizar la instrucción del sistema
+            let currentSystemInstruction = SYSTEM_INSTRUCTION
+                .replace('{{CATALOG_CONTEXT}}', catalogContext)
+                .replace('{{USER_CONTEXT}}', userContext);
+
+            // 4. Manejar historial
             let currentHistory = history;
             if (currentHistory === null) {
                 chatHistory.push({
@@ -145,7 +209,6 @@ const chatWithBot = async (userMessage, history = null) => {
                         if (res.statusCode === 200 || res.statusCode === 201) {
                             const assistantMessage = parsed.choices?.[0]?.message?.content || '';
                             
-                            // Si usamos el historial global, lo actualizamos
                             if (history === null) {
                                 chatHistory.push({ role: 'assistant', content: assistantMessage });
                                 if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);

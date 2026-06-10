@@ -25,4 +25,22 @@ const isAdmin = (req, res, next) => {
     }
 };
 
-module.exports = { verifyToken, isAdmin };
+const resolveUser = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return next();
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+        req.user = decoded;
+        next();
+    } catch (error) {
+        // Si el token es inválido, simplemente seguimos como invitado
+        next();
+    }
+};
+
+module.exports = { verifyToken, isAdmin, resolveUser };

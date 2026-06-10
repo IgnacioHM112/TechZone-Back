@@ -11,7 +11,7 @@ const handleChatMessage = async (req, res) => {
             });
         }
 
-        const result = await chatWithBot(message);
+        const result = await chatWithBot(message, null, req.user);
 
         if (!result.success) {
             return res.status(500).json(result);
@@ -56,7 +56,7 @@ const handleEmailReply = async (req, res) => {
 
         // Pasamos un array vacío si no hay historial para que sea "stateless"
         // y no use el historial global del chat de la web
-        const result = await chatWithBot(message, history || []);
+        const result = await chatWithBot(message, history || [], req.user);
 
         if (!result.success) {
             return res.status(500).json(result);

@@ -1,5 +1,6 @@
 const User = require('../models/user');
 const Role = require('../models/role');
+const Order = require('../models/order');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -112,4 +113,63 @@ const getProfile = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile };
+const getAllUsers = async (req, res) => {
+    try {
+        const users = await User.findAll({
+            attributes: ['id', 'name', 'email'],
+            include: [
+                { model: Role, as: 'role', attributes: ['name'] },
+                { 
+                    model: Order, 
+                    as: 'orders', 
+                    attributes: ['id', 'total', 'status', 'created_at'],
+                    separate: true,
+                    order: [['created_at', 'DESC']]
+                }
+            ]
+        });
+
+        const formattedUsers = users.map(user => ({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role ? user.role.name : 'sin rol',
+            orders: user.orders.map(order => ({
+                id: order.id,
+                total: parseFloat(order.total),
+                status: order.status,
+                date: order.created_at
+            }))
+        }));
+
+        res.json(formattedUsers);
+    } catch (error) {
+        console.error('❌ Error al obtener lista de usuarios:', error);
+        res.status(500).json({ mensaje: "Error al obtener usuarios", error: error.message });
+    }
+};
+
+const deleteUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Evitar que el admin se borre a sí mismo (opcional pero recomendado)
+        if (parseInt(id) === req.user.id) {
+            return res.status(400).json({ mensaje: "No puedes eliminar tu propia cuenta de administrador" });
+        }
+
+        const user = await User.findByPk(id);
+        if (!user) {
+            return res.status(404).json({ mensaje: "Usuario no encontrado" });
+        }
+
+        await user.destroy();
+        console.log(`🗑️ Usuario eliminado por admin: (ID: ${id})`);
+        res.json({ mensaje: "Usuario eliminado correctamente" });
+    } catch (error) {
+        console.error('❌ Error al eliminar usuario:', error);
+        res.status(500).json({ mensaje: "Error al eliminar usuario", error: error.message });
+    }
+};
+
+module.exports = { register, login, getProfile, getAllUsers, deleteUser };

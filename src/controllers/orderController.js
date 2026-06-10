@@ -284,6 +284,48 @@ const orderController = {
         }
     },
 
+    getUserOrders: async (req, res) => {
+        try {
+            const user_id = req.user.id;
+            const orders = await Order.findAll({
+                where: { user_id },
+                attributes: ['id', 'total', 'status', 'created_at'],
+                include: [
+                    {
+                        model: OrderItem,
+                        as: 'items',
+                        attributes: ['quantity', 'price'],
+                        include: [
+                            {
+                                model: Product,
+                                as: 'product',
+                                attributes: ['name']
+                            }
+                        ]
+                    }
+                ],
+                order: [['created_at', 'DESC']]
+            });
+
+            const formattedOrders = orders.map(order => ({
+                id: order.id,
+                total: parseFloat(order.total),
+                status: order.status,
+                date: order.created_at,
+                items: order.items.map(item => ({
+                    name: item.product ? item.product.name : 'Producto no disponible',
+                    quantity: item.quantity,
+                    price: parseFloat(item.price)
+                }))
+            }));
+
+            res.json(formattedOrders);
+        } catch (error) {
+            console.error('❌ Error en getUserOrders:', error.message);
+            res.status(500).json({ mensaje: "Error al obtener el historial de órdenes", error: error.message });
+        }
+    },
+
     getOrderDetails: async (req, res) => {
         try {
             const { id } = req.params;

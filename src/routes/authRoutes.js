@@ -1,13 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const { verifyToken } = require('../middlewares/authMiddleware');
+const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
 
 // RUTAS PÚBLICAS
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 
-// RUTA PROTEGIDA (Ejemplo de perfil)
+// RUTA PROTEGIDA (Perfil propio)
 router.get('/profile', verifyToken, authController.getProfile);
+
+// RUTAS DE ADMINISTRADOR
+router.get('/users', verifyToken, isAdmin, authController.getAllUsers);
+router.delete('/users/:id', verifyToken, isAdmin, authController.deleteUser);
 
 module.exports = router;

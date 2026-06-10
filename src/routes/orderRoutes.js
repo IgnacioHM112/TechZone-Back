@@ -9,6 +9,7 @@ router.post('/webhook', orderController.handleWebhook);
 // RUTAS PROTEGIDAS
 router.use(verifyToken);
 
+router.get('/', orderController.getUserOrders);
 router.post('/create-preference', orderController.createPreference);
 router.post('/confirm', orderController.confirmPayment);
 router.get('/:id', orderController.getOrderDetails);
