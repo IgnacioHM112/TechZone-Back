@@ -6,6 +6,8 @@ const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
 // RUTAS PÚBLICAS
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
 
 // RUTA PROTEGIDA (Perfil propio)
 router.get('/profile', verifyToken, authController.getProfile);
