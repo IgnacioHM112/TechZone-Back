@@ -35,6 +35,12 @@ app.use(cors({
 
 app.use(express.json());
 
+// Debug: log all requests
+app.use((req, res, next) => {
+    console.log(`📥 ${req.method} ${req.path}`);
+    next();
+});
+
 // --- RUTAS ---
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -43,6 +49,12 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/external', externalRoutes);
+
+// Test inline route
+app.get('/api/inline-test', (req, res) => res.json({ ok: true, inline: true }));
+
+// Debug route
+app.get('/api/debug', (req, res) => res.json({ ok: true, time: Date.now() }));
 
 // --- INTEGRACIÓN CON FRONTEND (Túnel Único Ngrok) ---
 const proxy = require('express-http-proxy');

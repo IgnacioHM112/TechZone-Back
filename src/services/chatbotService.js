@@ -138,12 +138,54 @@ const getUserContext = async (user) => {
     }
 };
 
+const generateLocalResponse = (userMessage, relevantProducts, userContext) => {
+    const msg = userMessage.toLowerCase();
+    
+    if (msg.includes('hola') || msg.includes('buenas') || msg.includes('saludo')) {
+        return `¡Hola! 👋 Bienvenido a **TechZone**. Soy tu asistente virtual especializado en hardware y componentes PC.\n\n¿En qué puedo ayudarte hoy? Puedes consultarme sobre:\n- **Productos** y precios (procesadores, GPU, RAM, almacenamiento, etc.)\n- **Stock** y disponibilidad\n- **Tu carrito** o **historial de compras** (si tienes sesión iniciada)\n- **Recomendaciones** según tu presupuesto o necesidades\n\n¡Estoy aquí para ayudarte! 💻`;
+    }
+    
+    if (msg.includes('gracias')) {
+        return `¡De nada! 😊 Me alegra poder ayudarte. Si tienes alguna otra duda sobre componentes, precios, o necesitas asistencia con tu carrito o pedidos, no dudes en consultarme.\n\n¡Que tengas un excelente día! 🚀`;
+    }
+    
+    if (msg.includes('carrito') || msg.includes('cart')) {
+        if (userContext.includes('CARRITO ACTUAL: El carrito se encuentra vacío')) {
+            return `Tu carrito está **vacío** en este momento. 🛒\n\nPuedes agregar productos desde el catálogo. Si necesitas recomendaciones sobre qué comprar según tu presupuesto o uso (gaming, trabajo, edición), solo dímelo y te ayudo. 💡`;
+        }
+        return `Aquí tienes el resumen de tu **carrito actual**:\n\n${userContext.split('CARRITO ACTUAL')[1]?.split('HISTORIAL')[0] || 'Productos en tu carrito'}\n\n¿Quieres que te ayude con algo específico sobre estos productos?`;
+    }
+    
+    if (msg.includes('compra') || msg.includes('pedido') || msg.includes('orden') || msg.includes('historial')) {
+        if (userContext.includes('No se registran compras previas')) {
+            return `No tienes **compras previas** registradas en el sistema. 📦\n\nCuando realices tu primer pedido, aparecerá aquí con todo el detalle. ¡Anímate a armar tu PC ideal! 💪`;
+        }
+        return `Aquí tienes tu **historial de compras**:\n\n${userContext.split('HISTORIAL DE COMPRAS')[1] || 'Sin compras recientes'}\n\n¿Necesitas el comprobante de alguna orden o tienes dudas sobre el estado de envío?`;
+    }
+    
+    if (relevantProducts.length > 0) {
+        let response = `Encontré estos productos que coinciden con tu búsqueda:\n\n`;
+        relevantProducts.slice(0, 5).forEach(p => {
+            const stockStatus = p.stock > 0 ? `✅ **Stock: ${p.stock} unidades**` : `❌ **Sin stock**`;
+            response += `- **${p.name}** (${p.category?.name || 'General'})\n  Precio: **$${p.price}** | ${stockStatus}\n  ${p.description?.substring(0, 100)}...\n\n`;
+        });
+        response += `¿Te interesa alguno en particular? Puedo darte más detalles o ayudarte a comparar. 🔍`;
+        return response;
+    }
+    
+    return `No encontré productos exactos para **"${userMessage}"** en el catálogo actual. 🔍\n\n**Categorías disponibles**: Procesadores, GPU, RAM, Almacenamiento (SSD/HDD), Motherboards, Fuentes de poder, Gabinetes, Refrigeración, Periféricos, Accesorios.\n\n¿Podrías ser más específico? Por ejemplo:\n- *"Busco una GPU para gaming 1080p bajo $500.000"*
+- *"Necesito 32GB RAM DDR5"*
+- *"Qué motherboard recomiendan para Ryzen 7 7800X3D"*
+
+¡Estoy aquí para ayudarte a encontrar lo que necesitas! 💻`;
+};
+
 const chatWithBot = async (userMessage, history = null, user = null) => {
-    return new Promise(async (resolve, reject) => {
+    return new Promise(async (resolve) => {
         try {
-            // 1. Obtener productos relevantes
             const relevantProducts = await getRelevantProducts(userMessage);
-            
+            const userContext = await getUserContext(user);
+
             let catalogContext = "";
             if (relevantProducts.length > 0) {
                 catalogContext = relevantProducts.map(p => 
@@ -153,85 +195,87 @@ const chatWithBot = async (userMessage, history = null, user = null) => {
                 catalogContext = "No hay productos exactos en el catálogo para esta búsqueda. Informar al usuario que puede consultar por otros componentes.";
             }
 
-            // 2. Obtener contexto del usuario
-            const userContext = await getUserContext(user);
+            const groqKey = process.env.GROQ_API_KEY;
+            const hasValidGroqKey = groqKey && groqKey.length > 20 && groqKey.startsWith('gsk_');
+            
+            if (hasValidGroqKey) {
+                let currentSystemInstruction = SYSTEM_INSTRUCTION
+                    .replace('{{CATALOG_CONTEXT}}', catalogContext)
+                    .replace('{{USER_CONTEXT}}', userContext);
 
-            // 3. Personalizar la instrucción del sistema
-            let currentSystemInstruction = SYSTEM_INSTRUCTION
-                .replace('{{CATALOG_CONTEXT}}', catalogContext)
-                .replace('{{USER_CONTEXT}}', userContext);
+                let currentHistory = history;
+                if (currentHistory === null) {
+                    chatHistory.push({ role: 'user', content: userMessage });
+                    currentHistory = chatHistory;
+                } else {
+                    currentHistory = [...history, { role: 'user', content: userMessage }];
+                }
 
-            // 4. Manejar historial
-            let currentHistory = history;
-            if (currentHistory === null) {
-                chatHistory.push({
-                    role: 'user',
-                    content: userMessage,
+                const messages = [
+                    { role: 'system', content: currentSystemInstruction },
+                    ...currentHistory,
+                ];
+
+                const postData = JSON.stringify({
+                    model: 'llama-3.1-8b-instant',
+                    messages: messages,
+                    temperature: 0.6,
+                    max_tokens: 1024,
+                    top_p: 0.9,
                 });
-                currentHistory = chatHistory;
-            } else {
-                currentHistory = [...history, { role: 'user', content: userMessage }];
-            }
 
-            const messages = [
-                {
-                    role: 'system',
-                    content: currentSystemInstruction,
-                },
-                ...currentHistory,
-            ];
+                const options = {
+                    hostname: 'api.groq.com',
+                    path: '/openai/v1/chat/completions',
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${groqKey}`,
+                        'Content-Length': Buffer.byteLength(postData),
+                    },
+                    timeout: 10000,
+                };
 
-            const postData = JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: messages,
-                temperature: 0.6,
-                max_tokens: 1024,
-                top_p: 0.9,
-            });
-
-            const options = {
-                hostname: 'api.groq.com',
-                path: '/openai/v1/chat/completions',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                    'Content-Length': Buffer.byteLength(postData),
-                },
-            };
-
-            const req = https.request(options, (res) => {
-                let data = '';
-                res.on('data', (chunk) => { data += chunk; });
-                res.on('end', () => {
-                    try {
-                        const parsed = JSON.parse(data);
-                        if (res.statusCode === 200 || res.statusCode === 201) {
-                            const assistantMessage = parsed.choices?.[0]?.message?.content || '';
-                            
-                            if (history === null) {
-                                chatHistory.push({ role: 'assistant', content: assistantMessage });
-                                if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+                const req = https.request(options, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => { data += chunk; });
+                    res.on('end', () => {
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (res.statusCode === 200 || res.statusCode === 201) {
+                                const assistantMessage = parsed.choices?.[0]?.message?.content || '';
+                                if (history === null) {
+                                    chatHistory.push({ role: 'assistant', content: assistantMessage });
+                                    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+                                }
+                                resolve({ success: true, message: assistantMessage });
+                            } else {
+                                console.warn('Groq API error, using fallback:', parsed.error?.message);
+                                const fallbackResponse = generateLocalResponse(userMessage, relevantProducts, userContext);
+                                resolve({ success: true, message: fallbackResponse });
                             }
-                            
-                            resolve({ success: true, message: assistantMessage });
-                        } else {
-                            console.error('Error de API Groq:', parsed);
-                            resolve({ success: false, message: 'Error de IA.', error: parsed.error?.message });
+                        } catch (e) {
+                            console.warn('Groq parse error, using fallback');
+                            const fallbackResponse = generateLocalResponse(userMessage, relevantProducts, userContext);
+                            resolve({ success: true, message: fallbackResponse });
                         }
-                    } catch (e) {
-                        resolve({ success: false, message: 'Error de procesamiento.', error: e.message });
-                    }
+                    });
                 });
-            });
 
-            req.on('error', (e) => {
-                resolve({ success: false, message: 'Error de conexión.', error: e.message });
-            });
+                req.on('error', (e) => {
+                    console.warn('Groq connection error, using fallback:', e.message);
+                    const fallbackResponse = generateLocalResponse(userMessage, relevantProducts, userContext);
+                    resolve({ success: true, message: fallbackResponse });
+                });
 
-            req.write(postData);
-            req.end();
+                req.write(postData);
+                req.end();
+            } else {
+                const fallbackResponse = generateLocalResponse(userMessage, relevantProducts, userContext);
+                resolve({ success: true, message: fallbackResponse });
+            }
         } catch (error) {
+            console.error('Error en chatWithBot:', error);
             resolve({ success: false, message: 'Error inesperado.', error: error.message });
         }
     });

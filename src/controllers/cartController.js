@@ -1,6 +1,7 @@
 const Cart = require('../models/cart');
 const CartItem = require('../models/cartItem');
 const Product = require('../models/product');
+const { getBTCPrice } = require('../services/cryptoService');
 
 const cartController = {
     // Obtener el carrito del usuario logueado
@@ -14,7 +15,34 @@ const cartController = {
                     include: [{ model: Product, as: 'product' }]
                 }]
             });
-            res.json(cart);
+
+            const cartJSON = cart.toJSON();
+
+            let totalUSD = 0;
+            if (cartJSON.items && cartJSON.items.length > 0) {
+                totalUSD = cartJSON.items.reduce((sum, item) => {
+                    return sum + (parseFloat(item.unit_price) * item.quantity);
+                }, 0);
+                totalUSD = parseFloat(totalUSD.toFixed(2));
+            }
+            cartJSON.totalUSD = totalUSD;
+
+            try {
+                const btcRate = await getBTCPrice();
+                cartJSON.cryptoOptions = [
+                    {
+                        currency: 'BTC',
+                        symbol: '₿',
+                        rate: btcRate,
+                        total: parseFloat((totalUSD / btcRate).toFixed(8)),
+                        label: 'Bitcoin'
+                    }
+                ];
+            } catch {
+                cartJSON.cryptoOptions = [];
+            }
+
+            res.json(cartJSON);
         } catch (error) {
             res.status(500).json({ mensaje: "Error al obtener el carrito", error: error.message });
         }
