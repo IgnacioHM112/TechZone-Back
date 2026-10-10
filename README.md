@@ -27,7 +27,7 @@ Este proyecto utiliza un stack moderno y potente para garantizar la mejor experi
 
 ## 🌟 Características Destacadas
 
-- **🤖 IA Chatbot Support**: Asistente inteligente integrado con **Groq (Llama 3)** que conoce el catálogo real de productos y ayuda a los usuarios con consultas técnicas y recomendaciones.
+- **🤖 IA Chatbot Support**: Asistente inteligente integrado con **Groq (Llama 3)** que conoce el catálogo real de productos y ayuda a los usuarios con consultas técnicas y recomendaciones. Incluye **fallback local** si la API key no está configurada o falla. Endpoint `/api/chatbot/email` para automatizaciones (N8N, Make).
 - **💳 Pasarela de Pagos**: Integración completa con **Mercado Pago**, incluyendo creación de preferencias, procesamiento de pagos y webhooks para notificaciones en tiempo real.
 - **📄 Generación de Comprobantes**: Creación automática de facturas/comprobantes en formato PDF tras finalizar una compra.
 - **🖼️ Gestión Multimedia**: Subida de imágenes de productos directamente a **Cloudinary**.
@@ -96,6 +96,7 @@ A continuación, se detallan las rutas principales de la API:
 | :--- | :--- | :--- | :--- |
 | `/api/chatbot/` | `POST` | Enviar mensaje al chatbot (Contexto de catálogo). | No |
 | `/api/chatbot/reset` | `POST` | Reiniciar el historial del chat. | No |
+| `/api/chatbot/email` | `POST` | Respuesta stateless para automatizaciones (email). | No |
 
 ### 🔌 Externos (Automatizaciones)
 | Endpoint | Método | Descripción | Protegida |
@@ -122,7 +123,7 @@ npm install
 ### 3. Configurar variables de entorno
 Crea un archivo `.env` en la raíz del proyecto basándote en `.env.example`:
 ```env
-PORT=3000
+PORT=3002
 DB_NAME=techzone_db
 DB_USER=root
 DB_PASSWORD=tu_password
@@ -136,8 +137,11 @@ CLOUDINARY_API_SECRET=...
 
 # Mercado Pago
 MP_ACCESS_TOKEN=...
+MP_SUCCESS_URL=https://TU_NGROK_URL/payment-success
+MP_FAILURE_URL=https://TU_NGROK_URL/payment-failure
+WEBHOOK_URL=https://TU_NGROK_URL/api/orders/webhook
 
-# AI (Groq)
+# AI (Groq) - opcional, usa fallback local si no configurado
 GROQ_API_KEY=...
 
 # External
