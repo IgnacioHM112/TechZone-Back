@@ -8,31 +8,19 @@ const OrderItem = require('../models/orderItem');
 const { Op } = require('sequelize');
 
 const SYSTEM_INSTRUCTION = `
-Eres el asistente de atención al cliente de TechZone, experto en hardware y componentes de PC.
-Tu rol es ayudar a los usuarios de manera profesional, amigable y visualmente clara.
+Eres el asistente de TechZone, experto en hardware PC. Responde de forma directa, concisa y profesional.
 
-REGLAS DE FORMATO (MANDATORIAS):
-1. **Markdown estricto**: Usa negritas para nombres de productos, precios y títulos.
-2. **Espaciado**: Deja una línea en blanco entre párrafos y secciones para que el texto sea fácil de leer.
-3. **Listas**: Usa puntos de lista (\`-\` o \`*\`) para enumerar productos, características o pasos.
-4. **Emojis**: Usa emojis de forma sutil para mejorar la experiencia (ej: 💻, 🚀, 💰, ✅).
-5. **Saludo y Despedida**: Comienza con un saludo cordial y termina con una invitación a seguir consultando.
+REGLAS DE FORMATO:
+1. **Sin líneas en blanco innecesarias**. Una línea entre secciones máximo.
+2. **Listas compactas**: Usa \`-\` para items, sin línea extra entre items.
+3. **Negritas** solo para: nombres de productos, precios, stock.
+4. **Emojis** solo al inicio/final (máx 1).
+5. **Máx 3-4 líneas** por respuesta salvo lista de productos.
 
-DIRECTRICES DE CONTENIDO:
-1. Solo proporcionas información de productos presentes en el **CATÁLOGO REAL** proporcionado abajo.
-2. Siempre menciona el **PRECIO** y la **DISPONIBILIDAD** (Stock) de forma objetiva.
-3. Si el stock es 0, informa que no hay disponibilidad actual.
-4. Si un producto no está en el catálogo, informa al usuario con amabilidad y menciona opciones con características similares.
-5. Tu función es ser un asistente informativo y experto. No realices transacciones ni fuerces la venta; tu objetivo es brindar datos precisos para que el usuario tome su propia decisión.
-6. Sé conciso y profesional. No inventes datos técnicos ni precios.
+CONTEXTO USUARIO: {{USER_CONTEXT}}
+CATÁLOGO: {{CATALOG_CONTEXT}}
 
-CONTEXTO PERSONAL DEL USUARIO:
-{{USER_CONTEXT}}
-
-CATÁLOGO REAL (Contexto actual):
-{{CATALOG_CONTEXT}}
-
-Responde siempre en español y asegúrate de que el formato sea impecable.
+Sé breve. Si no hay stock, dilo. Si no existe, sugiere alternativas.
 `;
 
 let chatHistory = [];
@@ -142,42 +130,37 @@ const generateLocalResponse = (userMessage, relevantProducts, userContext) => {
     const msg = userMessage.toLowerCase();
     
     if (msg.includes('hola') || msg.includes('buenas') || msg.includes('saludo')) {
-        return `¡Hola! 👋 Bienvenido a **TechZone**. Soy tu asistente virtual especializado en hardware y componentes PC.\n\n¿En qué puedo ayudarte hoy? Puedes consultarme sobre:\n- **Productos** y precios (procesadores, GPU, RAM, almacenamiento, etc.)\n- **Stock** y disponibilidad\n- **Tu carrito** o **historial de compras** (si tienes sesión iniciada)\n- **Recomendaciones** según tu presupuesto o necesidades\n\n¡Estoy aquí para ayudarte! 💻`;
+        return `¡Hola! 👋 Soy tu asistente TechZone.\n- **Productos** y precios (GPU, CPU, RAM, SSD...)\n- **Stock** y disponibilidad\n- **Tu carrito** / **historial** (si estás logueado)\n- **Recomendaciones** por presupuesto/uso\n¿En qué te ayudo?`;
     }
     
     if (msg.includes('gracias')) {
-        return `¡De nada! 😊 Me alegra poder ayudarte. Si tienes alguna otra duda sobre componentes, precios, o necesitas asistencia con tu carrito o pedidos, no dudes en consultarme.\n\n¡Que tengas un excelente día! 🚀`;
+        return `¡De nada! 😊 ¿Algo más en lo que ayudarte?`;
     }
     
     if (msg.includes('carrito') || msg.includes('cart')) {
         if (userContext.includes('CARRITO ACTUAL: El carrito se encuentra vacío')) {
-            return `Tu carrito está **vacío** en este momento. 🛒\n\nPuedes agregar productos desde el catálogo. Si necesitas recomendaciones sobre qué comprar según tu presupuesto o uso (gaming, trabajo, edición), solo dímelo y te ayudo. 💡`;
+            return `Tu carrito está **vacío** 🛒\nAgrega productos desde el catálogo o dime tu presupuesto y te recomiendo.`;
         }
-        return `Aquí tienes el resumen de tu **carrito actual**:\n\n${userContext.split('CARRITO ACTUAL')[1]?.split('HISTORIAL')[0] || 'Productos en tu carrito'}\n\n¿Quieres que te ayude con algo específico sobre estos productos?`;
+        return `Tu **carrito**:\n${userContext.split('CARRITO ACTUAL')[1]?.split('HISTORIAL')[0] || 'Productos en tu carrito'}\n¿Necesitas algo más?`;
     }
     
     if (msg.includes('compra') || msg.includes('pedido') || msg.includes('orden') || msg.includes('historial')) {
         if (userContext.includes('No se registran compras previas')) {
-            return `No tienes **compras previas** registradas en el sistema. 📦\n\nCuando realices tu primer pedido, aparecerá aquí con todo el detalle. ¡Anímate a armar tu PC ideal! 💪`;
+            return `No tienes **compras previas** 📦\nTu primer pedido aparecerá aquí.`;
         }
-        return `Aquí tienes tu **historial de compras**:\n\n${userContext.split('HISTORIAL DE COMPRAS')[1] || 'Sin compras recientes'}\n\n¿Necesitas el comprobante de alguna orden o tienes dudas sobre el estado de envío?`;
+        return `Tu **historial**:\n${userContext.split('HISTORIAL DE COMPRAS')[1] || 'Sin compras recientes'}\n¿Buscas algún comprobante?`;
     }
     
     if (relevantProducts.length > 0) {
-        let response = `Encontré estos productos que coinciden con tu búsqueda:\n\n`;
-        relevantProducts.slice(0, 5).forEach(p => {
-            const stockStatus = p.stock > 0 ? `✅ **Stock: ${p.stock} unidades**` : `❌ **Sin stock**`;
-            response += `- **${p.name}** (${p.category?.name || 'General'})\n  Precio: **$${p.price}** | ${stockStatus}\n  ${p.description?.substring(0, 100)}...\n\n`;
+        let response = `Productos encontrados:\n`;
+        relevantProducts.slice(0, 4).forEach(p => {
+            const stock = p.stock > 0 ? `✅ ${p.stock} uds` : `❌ Sin stock`;
+            response += `- **${p.name}** - **$${p.price}** | ${stock}\n`;
         });
-        response += `¿Te interesa alguno en particular? Puedo darte más detalles o ayudarte a comparar. 🔍`;
-        return response;
+        return response + `\n¿Detalles de alguno?`;
     }
     
-    return `No encontré productos exactos para **"${userMessage}"** en el catálogo actual. 🔍\n\n**Categorías disponibles**: Procesadores, GPU, RAM, Almacenamiento (SSD/HDD), Motherboards, Fuentes de poder, Gabinetes, Refrigeración, Periféricos, Accesorios.\n\n¿Podrías ser más específico? Por ejemplo:\n- *"Busco una GPU para gaming 1080p bajo $500.000"*
-- *"Necesito 32GB RAM DDR5"*
-- *"Qué motherboard recomiendan para Ryzen 7 7800X3D"*
-
-¡Estoy aquí para ayudarte a encontrar lo que necesitas! 💻`;
+    return `No encontré **"${userMessage}"** 🔍\nCategorías: Procesadores, GPU, RAM, SSD/HDD, Motherboards, Fuentes, Gabinetes, Refrigeración, Periféricos.\nEjemplos:\n- "GPU gaming 1080p < $500k"\n- "32GB DDR5"\n- "Motherboard Ryzen 7 7800X3D"\n¿Qué buscas?`;
 };
 
 const chatWithBot = async (userMessage, history = null, user = null) => {
